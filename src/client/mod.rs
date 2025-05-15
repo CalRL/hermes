@@ -6,9 +6,11 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, WriteHalf};
 use tokio::net::TcpStream;
 use tokio::sync::{Mutex};
 use crate::client::forwarding::forward_to_peer;
+use crate::utils::message::JSONMessage;
 
 mod forwarding;
 mod lookup;
+mod spring;
 
 pub async fn handle_connection(
     stream: TcpStream,
@@ -114,4 +116,8 @@ pub async fn send_keep_alives(connections: &SharedConnections) {
     }
 
     debug_mode::log("Keep-alive round complete.");
+}
+
+pub async fn log_to_api(message: JSONMessage) {
+
 }

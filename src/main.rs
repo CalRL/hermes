@@ -4,14 +4,17 @@ mod client;
 use std::collections::HashMap;
 use std::io::Write;
 use std::sync::Arc;
+use utils::config;
 use tokio::io::WriteHalf;
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::{mpsc, Mutex, RwLock};
+use tokio::sync::{Mutex, RwLock};
+
 
 pub type SharedConnections = Arc<RwLock<HashMap<String, Arc<Mutex<WriteHalf<TcpStream>>>>>>;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    config::init();
     let listener = TcpListener::bind("0.0.0.0:8000").await?;
     println!("Listening on 0.0.0.0:8000");
 

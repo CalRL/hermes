@@ -1,17 +1,10 @@
-use clap::Parser;
-
-#[derive(Parser, Debug)]
-#[command(author, version, about)]
-struct Args {
-    #[arg(long)]
-    debug: bool,
-}
-
+use crate::utils::config;
 const PREFIX: &str = "[DEBUG]";
 
-pub fn is_enabled() -> bool {
-    let args = Args::parse();
-    args.debug
+
+pub fn is_enabled() -> fn() -> bool {
+    let bool = config::is_debug;
+    bool
 }
 
 pub fn log(message: &str) {

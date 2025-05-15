@@ -5,12 +5,10 @@ edition = "2021"
 
 [dependencies]
 json = "0.12.4"
-ctrlc = "3"
-reqwest = { version = "0.11", features = ["blocking", "json"] }
-clap = { version = "4.5.36", features = ["derive"] }
 tokio = { version = "1.44.2", features = ["full"] }
+reqwest = { version = "0.11", features = ["blocking", "json"] }
 anyhow = "1.0.98"
-log = "0.4.27"
+dotenv = "0.15"
 
 [dev-dependencies]
 criterion = "0.5"
