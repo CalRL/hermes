@@ -20,6 +20,8 @@ pub fn init() {
         .map(|val| val == "true" || val == "1")
         .unwrap_or(false);
 
+    println!("Debug: {}", debug);
+
     CONFIG.set(Config { api_url, debug })
         .expect("Config already initialized");
 }

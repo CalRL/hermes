@@ -10,7 +10,6 @@ use crate::utils::message::JSONMessage;
 
 mod forwarding;
 mod lookup;
-mod spring;
 
 pub async fn handle_connection(
     stream: TcpStream,

@@ -2,9 +2,8 @@ use crate::utils::config;
 const PREFIX: &str = "[DEBUG]";
 
 
-pub fn is_enabled() -> fn() -> bool {
-    let bool = config::is_debug;
-    bool
+pub fn is_enabled() -> bool {
+    config::is_debug()
 }
 
 pub fn log(message: &str) {
