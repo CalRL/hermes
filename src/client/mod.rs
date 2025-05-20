@@ -1,10 +1,14 @@
-use std::net::{IpAddr, SocketAddr};
+use std::net::{IpAddr, SocketAddr, ToSocketAddrs};
 use std::sync::Arc;
-use crate::utils::debug_mode;
+use std::time::SystemTime;
+use json::JsonValue;
+use reqwest::{Method, Url};
+use crate::utils::{config, debug_mode};
 use crate::SharedConnections;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, WriteHalf};
 use tokio::net::TcpStream;
 use tokio::sync::{Mutex};
+use tokio::time::Instant;
 use crate::client::forwarding::forward_to_peer;
 use crate::utils::message::JSONMessage;
 
@@ -41,13 +45,18 @@ pub async fn handle_connection(
             debug_mode::log(&format!("[{}] > {}", addr_for_reader, line));
 
             match json::parse(&line) {
-                Ok(parsed) => {
+                Ok(mut parsed) => {
+                    debug_mode::log(&format!("{}", parsed));
+                    parsed["source"] = json::JsonValue::String(addr_for_reader.to_string());
+                    let formatted: &str = &format!("New source: {}", addr_for_reader.to_string());
+                    debug_mode::log(formatted);
                     if let Some(dest_ip) = parsed["destination"].as_str() {
                         if let Some((resolved_ip, stream_mutex)) =
                             resolve_ip(dest_ip, Arc::clone(&connections_reader)).await
                         {
                             let result = forward_to_peer(stream_mutex, &line).await;
                             debug_mode::log(&format!("[FORWARD to {}] {}", resolved_ip, result));
+                            log_to_api(parsed);
                         } else {
                             debug_mode::log(&format!("[WARN] No connection for {}", dest_ip));
                         }
@@ -117,6 +126,24 @@ pub async fn send_keep_alives(connections: &SharedConnections) {
     debug_mode::log("Keep-alive round complete.");
 }
 
-pub async fn log_to_api(message: JSONMessage) {
+pub async fn log_to_api(msg: JsonValue) -> Result<(), reqwest::Error> {
+    let mut message = &msg;
+    let form_data = vec![
+        ("source", message["source"].to_string()),
+        ("destination", message["destination"].to_string()),
+        ("command", message["command"].to_string()),
+        ("timestamp", format!("{:?}", SystemTime::now())),
+        ("machine_type", message["machine_type"].to_string())
+    ];
 
+    let result: Url = Url::parse(config::api_url()).expect("Failed");
+    let client = reqwest::Client::new();
+    let response = client.post(result.as_str())
+        .form(&form_data)
+        .send()
+        .await?;
+
+    debug_mode::log(&format!("Logged successfully: {}", response.status()));
+
+    Ok(())
 }

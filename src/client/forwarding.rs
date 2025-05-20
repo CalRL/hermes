@@ -14,7 +14,7 @@ pub async fn forward_to_peer(
 
     debug_mode::log("✅ Lock acquired, writing...");
     match stream.write_all(format!("{raw_msg}\n").as_bytes()).await {
-        Ok(_) => "Message sent".to_string(),
+        Ok(_) => { "Message sent to peer".to_string() }
         Err(e) => format!("Failed to write: {}", e),
     }
 

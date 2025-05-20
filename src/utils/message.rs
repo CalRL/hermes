@@ -5,7 +5,7 @@ use tokio::time::Instant;
 pub struct JSONMessage {
     pub source: String,
     pub destination: String,
-    pub content: JsonValue,
+    pub command: String,
     pub timestamp: Instant,
     pub machine_type: String,
 }

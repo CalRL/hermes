@@ -9,6 +9,7 @@ tokio = { version = "1.44.2", features = ["full"] }
 reqwest = { version = "0.11", features = ["blocking", "json"] }
 anyhow = "1.0.98"
 dotenv = "0.15"
+serde = { version = "1.0.219", features = ["derive"] }
 
 [dev-dependencies]
 criterion = "0.5"

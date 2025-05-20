@@ -4,6 +4,7 @@ mod client;
 use std::collections::HashMap;
 use std::io::Write;
 use std::sync::Arc;
+use std::time::Duration;
 use utils::config;
 use tokio::io::WriteHalf;
 use tokio::net::{TcpListener, TcpStream};
@@ -33,7 +34,12 @@ async fn main() -> anyhow::Result<()> {
     }
 
     loop {
-        let (stream, addr) = listener.accept().await?;
+        let (mut stream, addr) = listener.accept().await?;
+
+        // add lingering to not close the connection
+        let twelve_hours: u64 = 43200;
+        stream.set_linger(Some(Duration::from_secs(twelve_hours))).expect("set_linger call failed");
+
         let addr_str = addr.to_string();
         println!("New connection: {}", addr_str);
 
