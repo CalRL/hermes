@@ -12,7 +12,7 @@ pub async fn forward_to_peer(
     debug_mode::log("🔐 Locking destination stream to send...");
     let mut stream = stream_mutex.lock().await;
 
-    debug_mode::log("✅ Lock acquired, writing...");
+    debug_mode::log(&format!("✅ Lock acquired, writing: {}", raw_msg));
     match stream.write_all(format!("{raw_msg}\n").as_bytes()).await {
         Ok(_) => { "Message sent to peer".to_string() }
         Err(e) => format!("Failed to write: {}", e),

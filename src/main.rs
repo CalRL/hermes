@@ -27,8 +27,8 @@ async fn main() -> anyhow::Result<()> {
         let connections = Arc::clone(&connections);
         tokio::spawn(async move {
             loop {
-                tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
-                //client::send_keep_alives(&connections).await;
+                tokio::time::sleep(Duration::from_secs(300)).await;
+                client::send_keep_alives(&connections).await;
             }
         });
     }

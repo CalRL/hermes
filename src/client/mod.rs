@@ -1,14 +1,17 @@
 use std::net::{IpAddr, SocketAddr, ToSocketAddrs};
 use std::sync::Arc;
 use std::time::SystemTime;
-use json::JsonValue;
-use reqwest::{Method, Url};
+use json::{array, JsonValue};
+use reqwest::{Client, Method, Url};
+use time::format_description::well_known;
+use time::OffsetDateTime;
 use crate::utils::{config, debug_mode};
 use crate::SharedConnections;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, WriteHalf};
 use tokio::net::TcpStream;
 use tokio::sync::{Mutex};
 use tokio::time::Instant;
+use log::debug;
 use crate::client::forwarding::forward_to_peer;
 use crate::utils::message::JSONMessage;
 
@@ -39,24 +42,42 @@ pub async fn handle_connection(
     // Reader task
     let connections_reader = Arc::clone(&connections);
     let read_task = tokio::spawn(async move {
+
         debug_mode::log(&format!("[{}] Reader task started", addr_for_reader));
+
         let mut reader = BufReader::new(reader).lines();
         while let Ok(Some(line)) = reader.next_line().await {
-            debug_mode::log(&format!("[{}] > {}", addr_for_reader, line));
+            debug_mode::log("-------------------------------------------------------------");
+            debug_mode::log(&format!("[{}] Reader: > {}", addr_for_reader, line));
 
             match json::parse(&line) {
                 Ok(mut parsed) => {
                     debug_mode::log(&format!("{}", parsed));
-                    parsed["source"] = json::JsonValue::String(addr_for_reader.to_string());
-                    let formatted: &str = &format!("New source: {}", addr_for_reader.to_string());
+
+                    let parts: Vec<&str> = addr_for_reader.split(":").collect();
+                    let source: JsonValue = JsonValue::String(parts[0].to_string());
+                    debug_mode::log(source.as_str().unwrap());
+                    parsed["source"] = source.clone();
+
+                    let formatted: &str = &format!("New source: {}", source.clone());
                     debug_mode::log(formatted);
+
+                    debug_mode::log(&format!(
+                        "JSON Dump: {}",
+                        parsed.clone().dump()
+                    ));
+
                     if let Some(dest_ip) = parsed["destination"].as_str() {
                         if let Some((resolved_ip, stream_mutex)) =
                             resolve_ip(dest_ip, Arc::clone(&connections_reader)).await
                         {
-                            let result = forward_to_peer(stream_mutex, &line).await;
+
+                            let result = forward_to_peer(stream_mutex, &parsed.dump()).await;
                             debug_mode::log(&format!("[FORWARD to {}] {}", resolved_ip, result));
-                            log_to_api(parsed);
+                            //reply_to_sender(&addr_for_reader, &result, connections_reader.clone()).await;
+                            log_to_api(parsed).await.expect("TODO: panic message");
+
+
                         } else {
                             debug_mode::log(&format!("[WARN] No connection for {}", dest_ip));
                         }
@@ -82,19 +103,29 @@ pub async fn handle_connection(
     println!("Disconnected: {}", addr);
 }
 
-pub async fn resolve_ip(ip: &str, connections: SharedConnections) -> Option<(String, Arc<Mutex<WriteHalf<TcpStream>>>)> {
-
-    let target_ip: IpAddr = ip.parse().ok()?;
-
+pub async fn resolve_ip(
+    ip: &str,
+    connections: SharedConnections,
+) -> Option<(String, Arc<Mutex<WriteHalf<TcpStream>>>)> {
     let map = connections.read().await;
 
-    map.iter()
-        .find_map(|(key, stream)| {
-            key.parse::<SocketAddr>()
-                .ok()
-                .filter(|addr| addr.ip() == target_ip)
-                .map(|_| (key.clone(), Arc::clone(stream)))
-        })
+    if let Some(stream) = map.get(ip) {
+        return Some((ip.to_string(), Arc::clone(stream)));
+    }
+
+    if let Ok(target_ip) = ip.parse::<IpAddr>() {
+        return map.iter().find_map(|(key, stream)| {
+            key.parse::<SocketAddr>().ok().and_then(|addr| {
+                if addr.ip() == target_ip {
+                    Some((key.clone(), Arc::clone(stream)))
+                } else {
+                    None
+                }
+            })
+        });
+    }
+
+    None
 }
 
 pub async fn send_keep_alives(connections: &SharedConnections) {
@@ -126,24 +157,39 @@ pub async fn send_keep_alives(connections: &SharedConnections) {
     debug_mode::log("Keep-alive round complete.");
 }
 
-pub async fn log_to_api(msg: JsonValue) -> Result<(), reqwest::Error> {
-    let mut message = &msg;
-    let form_data = vec![
-        ("source", message["source"].to_string()),
-        ("destination", message["destination"].to_string()),
-        ("command", message["command"].to_string()),
-        ("timestamp", format!("{:?}", SystemTime::now())),
-        ("machine_type", message["machine_type"].to_string())
-    ];
+pub async fn log_to_api(mut msg: JsonValue) -> Result<(), reqwest::Error> {
+    let now = OffsetDateTime::now_utc();
+    let timestamp = now.format(&well_known::Rfc3339).unwrap();
+    msg["timestamp"] = timestamp.into();
 
-    let result: Url = Url::parse(config::api_url()).expect("Failed");
-    let client = reqwest::Client::new();
-    let response = client.post(result.as_str())
-        .form(&form_data)
+    debug_mode::log(&msg.dump());
+
+    let client = Client::new();
+    let response = client
+        .post(config::api_url())
+        .header(reqwest::header::CONTENT_TYPE, "application/json")
+        .body(msg.dump()) // JSON body
         .send()
         .await?;
 
-    debug_mode::log(&format!("Logged successfully: {}", response.status()));
-
+    debug_mode::log(&format!("[API] Logged successfully: {}", response.status()));
     Ok(())
+}
+
+async fn reply_to_sender(source_ip: &str, message: &str, shared_connections: SharedConnections) {
+    if let Some((_, sender_mutex)) = resolve_ip(source_ip.clone(), shared_connections.clone()).await {
+        let mut sender = sender_mutex.lock().await;
+        if let Err(e) = sender.write_all(format!("{}\n", message).as_bytes()).await {
+            debug_mode::log(&format!("[ERROR] Failed to respond to {}: {}", source_ip, e));
+        } else {
+            debug_mode::log(&format!("[{}] Sent response to original sender", source_ip));
+        }
+    } else {
+        debug_mode::log(&format!("[WARN] Could not find source IP {} to send response", source_ip));
+        debug_mode::log("-------------------------------------------------------------");
+        let map = shared_connections.read().await;
+        let keys: Vec<_> = map.keys().cloned().collect();
+        debug_mode::log(&format!("Active Connections: {:?}", keys));
+        debug_mode::log("-------------------------------------------------------------");
+    }
 }
