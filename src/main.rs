@@ -16,6 +16,7 @@ pub type SharedConnections = Arc<RwLock<HashMap<String, Arc<Mutex<WriteHalf<TcpS
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     config::init();
+    let _ = client::api::start_logger();
 
     let listener = TcpListener::bind("0.0.0.0:8000").await?;
     println!("Listening on 0.0.0.0:8000");

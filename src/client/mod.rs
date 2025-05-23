@@ -17,6 +17,7 @@ use crate::utils::message::JSONMessage;
 
 mod forwarding;
 mod lookup;
+pub(crate) mod api;
 
 pub async fn handle_connection(
     stream: TcpStream,
@@ -75,11 +76,20 @@ pub async fn handle_connection(
                             let result = forward_to_peer(stream_mutex, &parsed.dump()).await;
                             debug_mode::log(&format!("[FORWARD to {}] {}", resolved_ip, result));
                             //reply_to_sender(&addr_for_reader, &result, connections_reader.clone()).await;
-                            log_to_api(parsed).await.expect("TODO: panic message");
-
+                            //log_to_api(parsed).await.expect("TODO: panic message");
+                            if let Some(logger) = api::get_logger() {
+                                let _ = api::send_to_logger(parsed);
+                            }
 
                         } else {
                             debug_mode::log(&format!("[WARN] No connection for {}", dest_ip));
+                            reply_with_error(&addr_for_reader, &format!("Destination {} not connected", dest_ip), connections_reader.clone()).await;
+                            let mut json = parsed;
+                            json["content"] = JsonValue::from("fail, no dest");
+                            //log_to_api(json).await.expect("TODO: panic message");
+                            if let Some(logger) = api::get_logger() {
+                                let _ = api::send_to_logger(json);
+                            }
                         }
                     }
                 }
@@ -191,5 +201,27 @@ async fn reply_to_sender(source_ip: &str, message: &str, shared_connections: Sha
         let keys: Vec<_> = map.keys().cloned().collect();
         debug_mode::log(&format!("Active Connections: {:?}", keys));
         debug_mode::log("-------------------------------------------------------------");
+    }
+}
+
+pub async fn reply_with_error(
+    addr: &str,
+    message: &str,
+    shared: SharedConnections
+) {
+    let map = shared.read().await;
+    if let Some(sender_mutex) = map.get(addr) {
+        let sender_mutex = Arc::clone(sender_mutex);
+        let addr = addr.to_string();
+        let msg = "Message sent to peer\n".to_string();
+        debug_mode::log("msg created");
+
+        tokio::spawn(async move {
+            let mut stream = sender_mutex.lock().await;
+            if let Err(e) = stream.write_all(msg.as_bytes()).await {
+                debug_mode::log(&format!("[ERROR] Failed to notify {}: {}", addr, e));
+            }
+            debug_mode::log("Sent!")
+        });
     }
 }
