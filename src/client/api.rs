@@ -9,7 +9,7 @@ use crate::utils::debug_mode;
 static LOGGER_SENDER: Lazy<Mutex<Option<Sender<JsonValue>>>> = Lazy::new(|| Mutex::new(None));
 
 pub fn start_logger() -> Sender<JsonValue> {
-    let (tx, rx) = mpsc::channel(10000000);
+    let (tx, rx) = mpsc::channel(100000000);
     set_logger(tx.clone());
     tokio::spawn(api_logger(rx));
     tx
