@@ -76,7 +76,7 @@ pub async fn handle_connection(
                             let result = forward_to_peer(stream_mutex, &parsed.dump()).await;
                             debug_mode::log(&format!("[FORWARD to {}] {}", resolved_ip, result));
                             //reply_to_sender(&addr_for_reader, &result, connections_reader.clone()).await;
-                            //log_to_api(parsed).await.expect("TODO: panic message");
+                            log_to_api(parsed.clone()).await.expect("TODO: panic message");
                             if let Some(logger) = api::get_logger() {
                                 let _ = api::send_to_logger(parsed);
                             }
@@ -86,7 +86,7 @@ pub async fn handle_connection(
                             reply_with_error(&addr_for_reader, &format!("Destination {} not connected", dest_ip), connections_reader.clone()).await;
                             let mut json = parsed;
                             json["content"] = JsonValue::from("fail, no dest");
-                            //log_to_api(json).await.expect("TODO: panic message");
+                            log_to_api(json.clone()).await.expect("TODO: panic message");
                             if let Some(logger) = api::get_logger() {
                                 let _ = api::send_to_logger(json);
                             }
